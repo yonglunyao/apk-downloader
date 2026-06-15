@@ -52,7 +52,14 @@ class Downloader:
 
     def _locate_apkeep(self) -> str:
         if self.config.apkeep_path:
-            return self.config.apkeep_path
+            p = Path(self.config.apkeep_path)
+            if not p.is_file():
+                raise ApkeepNotFoundError(
+                    f"配置的 apkeep_path 指向的文件不存在: {p}\n"
+                    "请检查 config.toml 中 [general] apkeep_path 是否正确，"
+                    "或运行 'python -m gpdownloader doctor' 诊断。"
+                )
+            return str(p.resolve())
         found = shutil.which("apkeep")
         if not found:
             raise ApkeepNotFoundError(
