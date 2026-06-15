@@ -37,6 +37,8 @@ class DownloadResult:
     artifacts: list[Path]            # 实际下载到的文件
     sha256: dict[Path, str]          # 每个产物的 SHA-256
     returncode: int
+    stdout: str = ""                 # apkeep 完整 stdout（异常时诊断用）
+    stderr: str = ""                 # apkeep 完整 stderr
 
 
 # 其值需在日志中掩码的 flag
@@ -207,6 +209,8 @@ class Downloader:
             artifacts=artifacts,
             sha256=sha,
             returncode=proc.returncode,
+            stdout=combined_stdout,
+            stderr=proc.stderr.strip() if proc.stderr else "",
         )
 
         # ---- 基于 apkeep stdout 的状态解释 ----
@@ -227,8 +231,14 @@ class Downloader:
             log.warning("apkeep 返回成功但未下载到产物——可能被 Google Play 无声拒绝（区域/设备/账号限制）。")
             log.warning("建议：1) 换 device profile  2) 用 VPN 先通过手机端下载一次绑定账号  3) 检查 app 是否仍上架")
 
-        if proc.returncode != 0:
-            log.error("apkeep 退出码 %s", proc.returncode)
+        # 异常时输出 apkeep 完整原始输出供诊断
+        if proc.returncode != 0 or status in ("auth_failed", "invalid", "permission"):
+            log.error("=== apkeep 原始输出（诊断） ===")
+            if combined_stdout:
+                log.error("STDOUT:\n%s", combined_stdout)
+            if proc.stderr and proc.stderr.strip():
+                log.error("STDERR:\n%s", proc.stderr.strip())
+            log.error("退出码=%d  解析状态=%s", proc.returncode, status)
 
         self._log_result(result)
         return result
