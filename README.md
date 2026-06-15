@@ -28,16 +28,28 @@ python appgallery-downloader/appgallery_downloader.py C10406921 -o ./apks
 
 ### gpdownloader
 
-```bash
-# 安装 apkeep（见子项目 README），然后：
+> **所有命令必须在 `gpdownloader/` 目录下执行**，`python -m gpdownloader` 会从此目录查找 `config/config.toml` 和 `bin/apkeep.exe`。
 
-# 换取凭证（一次性）
+```bash
+cd gpdownloader
+
+# 1. 安装 apkeep（见子项目 README），然后初始化配置
+cp config/config.example.toml config/config.toml
+# 编辑 config.toml，填入 apkeep_path（指向 apkeep 可执行文件）
+
+# 2. 增大栈（Windows 必做，详见子项目 README）
+python -m gpdownloader fix-stack
+
+# 3. 换取凭证（一次性）
 python -m gpdownloader auth -e you@gmail.com --oauth-token "oauth2_4/..."
 
-# 下载 APK
+# 4. 自检
+python -m gpdownloader doctor
+
+# 5. 下载 APK
 python -m gpdownloader download com.example.app
 
-# 批量下载
+# 6. 批量下载
 python -m gpdownloader batch packages.txt
 ```
 
