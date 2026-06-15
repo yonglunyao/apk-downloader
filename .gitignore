@@ -1,0 +1,56 @@
+# apk-downloader (monorepo) 根 .gitignore
+# 子项目: appgallery-downloader / gpdownloader
+# 子项目各自另有 .gitignore;本文件提供根级统一保护。
+
+# ---- 凭证 / 密钥(严禁提交)----
+**/config.toml
+*.key
+*.pem
+*.p12
+.env
+**/.env
+.env.*
+
+# ---- APK 下载产物 / 样本 ----
+*.apk
+*.apks
+*.xapk
+*.aab
+*.obb
+**/downloads/
+
+# ---- 外部大二进制(apkeep 等从 release 单独下载,不入库)----
+gpdownloader/bin/
+*.exe.bak
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+
+# ---- IDE / 编辑器 ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ---- 日志 / 临时 ----
+*.log
+*.tmp

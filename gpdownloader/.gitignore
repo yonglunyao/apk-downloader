@@ -1,0 +1,21 @@
+# 凭证文件，严禁提交
+config/config.toml
+**/config.toml
+
+# apkeep 二进制（体积大，应从 release 单独下载，不入库）
+bin/
+*.exe.bak
+
+# 下载产物
+downloads/
+*.apk
+*.apks
+*.obb
+*.xapk
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+dist/
+*.egg-info/

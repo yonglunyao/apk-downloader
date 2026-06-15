@@ -1,0 +1,32 @@
+# gpdownloader 配置示例
+# 复制为 config.toml 后填入真实凭证。切勿将含凭证的 config.toml 提交到版本库。
+
+[general]
+# 下载源：google-play / apk-pure / f-droid / huawei-app-gallery
+source = "google-play"
+# 默认输出目录（相对于运行目录）。apkeep 会在其下自建 <appid>/ 子目录存放 split
+output_dir = "downloads"
+# 若 apkeep 不在 PATH，在此指定完整路径，例如：
+#   Windows: "D:/temp/gpdownloader/bin/apkeep.exe"
+#   Linux:   "/usr/local/bin/apkeep"
+apkeep_path = ""
+
+[credentials]
+# 推荐用命令自动填，无需手动编辑：
+#   python -m gpdownloader auth -e 你的邮箱 --oauth-token oauth2_4/...
+# （脚本会用一次性 OAuth token 换取长期 AAS token 并写回本文件）
+# 也可手动填下面两项（与 apkeep 的 -e / -t 一致）
+email = ""
+aas_token = ""
+
+[options]
+# 设备 profile，影响 Play 下发的 split 与可复现性。留空用 apkeep 默认 px_9a
+# 可选值见 https://github.com/EFForg/apkeep/blob/master/gpapi/device.properties
+# 同一凭证 + 同一 device 可复现下载相同包体（等价性验证基准）
+device = ""
+# 是否下载 split APK（App Bundle 拆包）。强烈建议 true
+split_apk = true
+# 是否下载 OBB 扩展文件
+obb = false
+# 是否自动接受 Play 条款（首次使用需要）
+accept_tos = false

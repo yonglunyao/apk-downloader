@@ -1,0 +1,14 @@
+# 下载产物
+*.apk
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
