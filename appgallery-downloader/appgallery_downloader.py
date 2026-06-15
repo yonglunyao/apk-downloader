@@ -41,6 +41,18 @@ def build_download_url(appid: str) -> str:
     return f"{_DOWNLOAD_BASE}{appid}"
 
 
+_APK_MAGIC = b"PK\x03\x04"
+
+
+def _is_valid_apk(path: str) -> bool:
+    """检查文件是否以 APK/ZIP magic 开头。"""
+    try:
+        with open(path, "rb") as f:
+            return f.read(4)[:2] == b"PK"
+    except OSError:
+        return False
+
+
 def extract_filename(url: str, appid: str) -> str:
     """从最终 CDN URL 解析文件名;无 .apk 后缀则回退 {appid}.apk。"""
     name = unquote(os.path.basename(urlsplit(url).path))
@@ -75,6 +87,9 @@ def download(appid: str, output_dir: str) -> str:
         with urllib.request.urlopen(req) as resp:
             final_url = resp.geturl()
             total = int(resp.headers.get("Content-Length") or 0)
+            content_type = resp.headers.get("Content-Type", "?")
+            print(f"  Content-Type: {content_type}")
+            print(f"  Final URL: {final_url[:120]}")
             filename = extract_filename(final_url, appid)
             os.makedirs(output_dir, exist_ok=True)
             dest = os.path.join(output_dir, filename)
@@ -95,6 +110,17 @@ def download(appid: str, output_dir: str) -> str:
                             print(f"  {downloaded / 1048576:.1f}MB / {total / 1048576:.1f}MB ({pct}%)")
                         else:
                             print(f"  {downloaded / 1048576:.1f}MB")
+            if not _is_valid_apk(dest):
+                size = os.path.getsize(dest)
+                html_dest = dest + ".html"
+                try:
+                    os.rename(dest, html_dest)
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    f"下载的不是 APK（{size} 字节, Content-Type={content_type}），"
+                    f"可能是错误页面。原始响应已保存为: {html_dest}"
+                )
             return dest
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code}: {_reason_for_code(e.code)}(appid={appid})") from e
