@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import struct
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,8 +85,9 @@ class Downloader:
             cmd.append("--accept-tos")
 
         opts: DownloadOptions = self.config.options
-        for kv in opts.to_apkeep_options():
-            cmd += ["-o", kv]
+        opt_str = opts.to_apkeep_options()
+        if opt_str:
+            cmd += ["-o", opt_str]
 
         cmd.append(str(output_dir))
         return cmd
@@ -127,6 +129,25 @@ class Downloader:
         return token
 
     @staticmethod
+    def _parse_status(stdout: str) -> str:
+        """从 apkeep stdout 解析下载状态，用于准确解释结果。"""
+        if not stdout:
+            return "unknown"
+        if "downloaded successfully" in stdout:
+            return "success"
+        if "File already exists" in stdout:
+            return "skipped"
+        if "Invalid app response" in stdout:
+            return "invalid"
+        if "Permission denied" in stdout:
+            return "permission"
+        if "Could not log in" in stdout:
+            return "auth_failed"
+        if "Retry" in stdout:
+            return "retried"
+        return "unknown"
+
+    @staticmethod
     def _sha256(path: Path) -> str:
         h = hashlib.sha256()
         with open(path, "rb") as f:
@@ -148,9 +169,6 @@ class Downloader:
         out = output_dir or self.config.output_dir
         out.mkdir(parents=True, exist_ok=True)
 
-        # 记录下载前已有文件，用于精确识别本次新增产物
-        before = {p for p in out.rglob("*") if p.is_file()}
-
         cmd = self._build_command(package, version, out)
         log.info("执行: %s", self._mask_command(cmd))
 
@@ -160,15 +178,25 @@ class Downloader:
             text=True,
             check=False,
         )
-        if proc.stdout:
-            log.info("[apkeep stdout]\n%s", proc.stdout.strip())
+        combined_stdout = proc.stdout.strip() if proc.stdout else ""
+        status = self._parse_status(combined_stdout)
+
+        if combined_stdout:
+            log.info("[apkeep stdout]\n%s", combined_stdout)
         if proc.stderr:
             log.warning("[apkeep stderr]\n%s", proc.stderr.strip())
 
-        artifacts = sorted(p for p in out.rglob("*") if p.is_file() and p not in before)
-        # 若目录本就为空（before 为空），fallback 到全部文件
-        if not artifacts and not before:
-            artifacts = sorted(p for p in out.rglob("*") if p.is_file())
+        # 扫描产物：apkeep 在 outpath 下自建 <appid>/ 子目录存放 split
+        pkg_dir = out / package
+        artifacts: list[Path] = []
+        if pkg_dir.is_dir():
+            artifacts = sorted(f for f in pkg_dir.rglob("*.apk") if f.is_file())
+        if not artifacts:
+            # fallback：产物可能直接放在 out 下（非 split 场景）
+            artifacts = sorted(
+                f for f in out.rglob(f"{package}*.apk")
+                if f.is_file()
+            )
 
         sha = {p: self._sha256(p) for p in artifacts}
 
@@ -181,8 +209,26 @@ class Downloader:
             returncode=proc.returncode,
         )
 
+        # ---- 基于 apkeep stdout 的状态解释 ----
+        if status == "skipped":
+            if artifacts:
+                log.info("文件已存在，跳过下载（以下为已有产物的 SHA-256）")
+            else:
+                log.warning("apkeep 判定文件已存在，但未找到产物；请检查 %s", pkg_dir)
+        elif status == "invalid":
+            log.warning("应用不可用——可能区域限制或设备不兼容。尝试换 device profile 或通过 VPN 先绑定到账号。")
+        elif status == "auth_failed":
+            log.error("凭证登录失败。请检查 email/aas_token 是否有效，必要时重新 auth。")
+        elif status == "permission":
+            log.error("写入权限不足：%s", out)
+        elif status == "retried":
+            log.warning("apkeep 进行了重试（网络或 Play API 不稳定）")
+        elif status == "unknown" and not artifacts and proc.returncode == 0:
+            log.warning("apkeep 返回成功但未下载到产物——可能被 Google Play 无声拒绝（区域/设备/账号限制）。")
+            log.warning("建议：1) 换 device profile  2) 用 VPN 先通过手机端下载一次绑定账号  3) 检查 app 是否仍上架")
+
         if proc.returncode != 0:
-            log.error("apkeep 退出码 %s，下载可能失败", proc.returncode)
+            log.error("apkeep 退出码 %s", proc.returncode)
 
         self._log_result(result)
         return result

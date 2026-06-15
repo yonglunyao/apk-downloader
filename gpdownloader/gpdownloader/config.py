@@ -44,14 +44,19 @@ class DownloadOptions:
     obb: bool = False                  # 下载 OBB 扩展文件
     accept_tos: bool = False           # 首次使用需接受 Play 条款
 
-    def to_apkeep_options(self) -> list[str]:
+    def to_apkeep_options(self) -> str | None:
+        """返回 apkeep 的 -o 参数值（逗号分隔），无选项时返回 None。
+
+        apkeep 的 -o 接受单个逗号分隔字符串，如 "device=redfin,split_apk=true"。
+        多次 -o 会被最后一个覆盖——这正是之前文件检测漏掉的根因。
+        """
         opts: list[str] = []
         if self.device:
             opts.append(f"device={self.device}")
         opts.append(f"split_apk={'true' if self.split_apk else 'false'}")
         if self.obb:
             opts.append("obb=true")
-        return opts
+        return ",".join(opts) if opts else None
 
 
 @dataclass(frozen=True)
