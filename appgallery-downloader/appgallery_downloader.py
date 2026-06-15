@@ -65,6 +65,13 @@ _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+_MOBILE_UA = (
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+)
+
+# 可切换的 UA 列表：桌面端不行时换移动端
+_UA_LIST = [_USER_AGENT, _MOBILE_UA]
 _CHUNK_SIZE = 64 * 1024
 _TIMEOUT = 30
 
@@ -77,56 +84,71 @@ def _reason_for_code(code: int) -> str:
     return "服务器返回错误"
 
 
-def download(appid: str, output_dir: str) -> str:
-    """下载 APK 到 output_dir,返回保存路径。失败抛 RuntimeError。"""
-    url = build_download_url(appid)
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    socket.setdefaulttimeout(_TIMEOUT)
-
+def _try_download(url: str, ua: str) -> tuple | None:
+    """尝试下载，返回 (final_url, content_type, body) 或 None（HTTP 错误）。"""
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
     try:
         with urllib.request.urlopen(req) as resp:
-            final_url = resp.geturl()
-            total = int(resp.headers.get("Content-Length") or 0)
-            content_type = resp.headers.get("Content-Type", "?")
-            print(f"  Content-Type: {content_type}")
-            print(f"  Final URL: {final_url[:120]}")
+            return (resp.geturl(), resp.headers.get("Content-Type", "?"), resp.read())
+    except urllib.error.HTTPError:
+        return None
+
+
+def download(appid: str, output_dir: str) -> str:
+    """下载 APK 到 output_dir，返回保存路径。失败抛 RuntimeError。
+
+    尝试多种 User-Agent（桌面→移动端），并用 APK magic 校验结果。
+    """
+    url = build_download_url(appid)
+    socket.setdefaulttimeout(_TIMEOUT)
+
+    last_detail = ""
+    for ua in _UA_LIST:
+        result = _try_download(url, ua)
+        if result is None:
+            last_detail = f"HTTP 错误（UA={ua[:30]}...）"
+            continue
+
+        final_url, content_type, body = result
+        print(f"  UA: {ua[:50]}...")
+        print(f"  Content-Type: {content_type}")
+        print(f"  Final URL: {final_url[:120]}")
+
+        # 检查是否是 APK（通过 magic）
+        if body[:2] == b"PK":
             filename = extract_filename(final_url, appid)
             os.makedirs(output_dir, exist_ok=True)
             dest = os.path.join(output_dir, filename)
-            downloaded = 0
-            last_mb = 0
             with open(dest, "wb") as f:
-                while True:
-                    chunk = resp.read(_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    mb = downloaded // (1024 * 1024)
-                    if mb > last_mb:
-                        last_mb = mb
-                        if total:
-                            pct = downloaded * 100 // total
-                            print(f"  {downloaded / 1048576:.1f}MB / {total / 1048576:.1f}MB ({pct}%)")
-                        else:
-                            print(f"  {downloaded / 1048576:.1f}MB")
-            if not _is_valid_apk(dest):
-                size = os.path.getsize(dest)
-                html_dest = dest + ".html"
-                try:
-                    os.rename(dest, html_dest)
-                except OSError:
-                    pass
-                raise RuntimeError(
-                    f"下载的不是 APK（{size} 字节, Content-Type={content_type}），"
-                    f"可能是错误页面。原始响应已保存为: {html_dest}"
-                )
+                f.write(body)
+            print(f"  ✓ 下载成功 {len(body) / 1048576:.1f}MB")
             return dest
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"HTTP {e.code}: {_reason_for_code(e.code)}(appid={appid})") from e
-    except (urllib.error.URLError, socket.timeout) as e:
-        reason = getattr(e, "reason", e)
-        raise RuntimeError(f"网络错误: {reason}") from e
+
+        # 不是 APK——如果只是 HTML 重定向到首页，记录细节并尝试下一个 UA
+        last_detail = (
+            f"返回的不是 APK（{len(body)} 字节, Content-Type={content_type}），"
+            f"UA={ua[:40]}..."
+        )
+        # 保存一份供调试
+        if b"<html" in body[:200].lower() or content_type.startswith("text/html"):
+            html_dest = os.path.join(output_dir or ".", f"{appid}.html")
+            with open(html_dest, "wb") as f:
+                f.write(body)
+            last_detail += f"，原始 HTML 已保存为 {html_dest}"
+
+    # 所有 UA 都失败
+    raise RuntimeError(
+        f"下载失败（已尝试 {len(_UA_LIST)} 种 User-Agent）。\n"
+        f"  最后错误: {last_detail}\n"
+        "可能原因:\n"
+        "  1. 该应用仅提供 AAB 格式（App Bundle），无公开 APK 直链\n"
+        "  2. 该应用需要 AppGallery 客户端内下载（带 HMS Core 认证）\n"
+        "  3. 该应用有区域/设备限制\n"
+        f"\n备选方案:\n"
+        f"  - 在 Android 设备上安装 AppGallery 客户端下载\n"
+        f"  - 通过 APKPure/APKMirror 搜索同包名 APK\n"
+        f"  - 若为 Google Play 应用，用 cd ../gpdownloader && python -m gpdownloader download <包名>"
+    )
 
 
 def main() -> int:
