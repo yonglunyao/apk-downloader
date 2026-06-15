@@ -15,7 +15,7 @@ pip install -r requirements.txt
 ## 用法
 
 ```bash
-python appgallery_downloader.py <APPID 或详情页URL> [-o 输出目录]
+python appgallery_downloader.py <APPID 或详情页URL> [-o 输出目录]  # 默认 ./downloads
 ```
 
 示例:

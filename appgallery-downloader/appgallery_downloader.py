@@ -111,7 +111,7 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="从华为 AppGallery 下载 APK")
     parser.add_argument("target", help="AppGallery APPID 或详情页 URL")
-    parser.add_argument("-o", "--output", default=".", help="输出目录(默认当前目录)")
+    parser.add_argument("-o", "--output", default="downloads", help="输出目录(默认 ./downloads)")
     args = parser.parse_args()
 
     try:
